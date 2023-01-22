@@ -1,0 +1,24 @@
+version: '3'
+
+services:
+  airflow:
+    build:
+      context: .
+      dockerfile: ./Dockerfile
+    container_name: airflow
+    restart: always
+    command: uvicorn app.main:app --host 0.0.0.0 --port 9000
+    env_file:
+      - app/.env
+    volumes:
+      - .:/airflow
+    ports:
+      - "9000:9000"
+
+  redis:
+    image: redis
+    command: redis-server
+    volumes:
+      - ../redis_data:/data
+    ports:
+      - "6379:6379"
