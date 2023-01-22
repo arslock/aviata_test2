@@ -15,7 +15,7 @@ async def search_flights():
     return {'search_id': search_id}
 
 
-@app.get("/result/{search_id}/{currency}")
+@app.get("/results/{search_id}/{currency}")
 def get_results(search_id: str, currency: str):
     result = get_search_results(search_id, currency)
     return JSONResponse(result)
