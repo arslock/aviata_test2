@@ -1,7 +1,6 @@
+import os
 import asyncio
 import json
-import os
-
 import aiohttp
 import redis
 import requests
@@ -52,7 +51,6 @@ async def send_request_to_providers(search_id: str):
 
 
 def get_search_results(search_id: str, currency: str):
-
     result = r.get(search_id)
     json_data = json.loads(result)
 
@@ -88,7 +86,6 @@ def add_price(data, currency):
 
 def get_currencies():
     current_date = datetime.today().strftime('%d.%m.%Y')
-
     url = f'https://www.nationalbank.kz/rss/get_rates.cfm?fdate={current_date}'
     response = requests.get(url)
     response_xml = ET.fromstring(response.text)
@@ -102,6 +99,5 @@ def get_currencies():
 
 
 def create_currencies_json_file(currency_json):
-    print(currency_json)
     with open('app/data/currency_json.json', 'w') as f:
         f.write(currency_json)

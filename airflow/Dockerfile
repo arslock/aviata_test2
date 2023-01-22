@@ -21,8 +21,4 @@ COPY cron.py ./
 
 RUN ["python", "./cron.py"]
 
-#COPY ./start_create_currencies.sh /start-create-currencies
-#RUN sed -i 's/\r$//g' /start-create-currencies
-#RUN chmod +x /start-create-currencies
-
 RUN crontab -l | { cat; echo "0 12 * * * python cron.py"; } | crontab -

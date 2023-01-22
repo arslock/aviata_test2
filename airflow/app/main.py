@@ -3,8 +3,7 @@ import uuid
 from fastapi.responses import JSONResponse
 from fastapi import FastAPI
 
-from app.service import send_request_to_providers, get_search_results, create_currencies_json_file, \
-    add_price, providers
+from app.service import send_request_to_providers, get_search_results
 
 app = FastAPI()
 
@@ -20,14 +19,4 @@ async def search_flights():
 def get_results(search_id: str, currency: str):
     result = get_search_results(search_id, currency)
     return JSONResponse(result)
-
-
-# currency_json = get_currencies()
-#
-# create_currencies_json_file(currency_json)
-
-# add_price(1, 'KZT')
-
-# print('AAAAAAAAA')
-# test_request_to_services()
 
