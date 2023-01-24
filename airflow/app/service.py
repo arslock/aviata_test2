@@ -1,6 +1,8 @@
 import os
 import asyncio
 import json
+from typing import Dict
+
 import aiohttp
 import redis
 import requests
@@ -12,79 +14,77 @@ load_dotenv()
 LOCAL_IP = os.environ.get('LOCAL_IP')
 
 
-r = redis.Redis(
-    host='redis',
-    port=6379,
-    db=0,
-    charset='utf-8',
-    decode_responses=True
-)
+class SearchService:
+    def __init__(self):
+        self.r = redis.Redis(
+            host='redis',
+            port=6379,
+            db=0,
+            charset='utf-8',
+            decode_responses=True
+        )
+        self.providers = [
+            f"http://{LOCAL_IP}:9001",
+            f"http://{LOCAL_IP}:9002"
+        ]
 
-providers = [
-    f"http://{LOCAL_IP}:9001",
-    f"http://{LOCAL_IP}:9002"
-]
+    async def request_to_provider(self, provider, search_id) -> None:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(f'{provider}/search') as response:
+                result = await response.json()
+                json_data = self.r.get(search_id)
+                data = json.loads(json_data)
+                data['items'] += result
+                data['count'] += 1
 
+                if data['count'] == 2:
+                    data['status'] = 'Completed'
 
-async def request_to_provider(provider, search_id):
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f'{provider}/search') as response:
-            result = await response.json()
-            json_data = r.get(search_id)
-            data = json.loads(json_data)
-            data['items'] += result
-            data['count'] += 1
+                self.r.set(search_id, json.dumps(data))
 
-            if data['count'] == 2:
-                data['status'] = 'Completed'
+    async def search_async(self, search_id: str) -> None:
+        data = {'search_id': f'{search_id}', 'status': 'Pending', 'items': [], 'count': 0}
+        json_data = json.dumps(data)
+        self.r.set(search_id, json_data)
 
-            r.set(search_id, json.dumps(data))
+        asyncio.create_task(
+            asyncio.gather(*[self.request_to_provider(provider, search_id) for provider in self.providers]))
 
+    def is_valid_search_id(self, search_id: str) -> bool:
+        return self.r.get(search_id) is not None
 
-async def send_request_to_providers(search_id: str):
-    data = {'search_id': f'{search_id}', 'status': 'Pending', 'items': [], 'count': 0}
-    json_data = json.dumps(data)
-    r.set(search_id, json_data)
+    def get_results(self, search_id: str, currency: str) -> Dict:
+        result = self.r.get(search_id)
+        json_data = json.loads(result)
 
-    tasks = [asyncio.create_task(request_to_provider(provider, search_id)) for provider in providers]
-    await asyncio.gather(*tasks)
+        self.filter_by_currency(json_data, currency)
+        self.add_price(json_data['items'], currency)
+        json_data.pop('count')
+        return json_data
 
+    @staticmethod
+    def filter_by_currency(data: Dict, currency: str) -> Dict:
+        data['items'] = [provider for provider in data['items'] if provider['pricing']['currency'] == currency]
+        data['items'] = sorted(data['items'], key=lambda x: x['pricing']['total'], reverse=True)
+        return data
 
-def get_search_results(search_id: str, currency: str):
-    result = r.get(search_id)
-    json_data = json.loads(result)
+    @staticmethod
+    def add_price(data: Dict, currency: str) -> Dict:
+        with open('app/data/currency_json.json', 'r') as f:
+            currency_json = json.load(f)
 
-    filter_by_currency(json_data, currency)
-    add_price(json_data['items'], currency)
+        exchange_rate = currency_json[currency] if currency != 'KZT' else 1
 
-    json_data.pop('count')
-
-    return json_data
-
-
-def filter_by_currency(data, currency):
-    data['items'] = [provider for provider in data['items'] if provider['pricing']['currency'] == currency]
-    data['items'] = sorted(data['items'], key=lambda x: x['pricing']['total'], reverse=True)
-    return data
-
-
-def add_price(data, currency):
-    with open('app/data/currency_json.json', 'r') as f:
-        currency_json = json.load(f)
-
-    exchange_rate = currency_json[currency] if currency != 'KZT' else 1
-
-    for provider in data:
-        amount = float(provider['pricing']['total']) * float(exchange_rate)
-        provider['price'] = {
-            'amount': round(amount, 2),
-            'currency': 'KZT'
-        }
-
-    return data
+        for provider in data:
+            amount = float(provider['pricing']['total']) * float(exchange_rate)
+            provider['price'] = {
+                'amount': round(amount, 2),
+                'currency': 'KZT'
+            }
+        return data
 
 
-def get_currencies():
+def get_currencies() -> json:
     current_date = datetime.today().strftime('%d.%m.%Y')
     url = f'https://www.nationalbank.kz/rss/get_rates.cfm?fdate={current_date}'
     response = requests.get(url)
@@ -98,6 +98,6 @@ def get_currencies():
     return currency_json
 
 
-def create_currencies_json_file(currency_json):
+def create_currencies_json_file(currency_json: json) -> None:
     with open('app/data/currency_json.json', 'w') as f:
         f.write(currency_json)
